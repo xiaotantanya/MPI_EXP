@@ -1,0 +1,2 @@
+add_executable(test_send_recv test_send_recv_large.c)
+target_link_libraries(test_send_recv MPI::MPI_C)

@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 float rand_float(float s){
     return 4*s*(1-s);
@@ -14,7 +15,7 @@ void matrix_gen(float *a, uint64_t N, float seed){
     }
 }
 
-uint64_t get_Num_from_cmd(int argc, char** argv, int rank){
+uint64_t get_Num_from_cmd(int argc, char** argv, int rank, int is_test){
     char * Num_str = argv[1];
     const uint64_t M_num = 1024 * 1024;
     uint64_t N = 0;
@@ -24,6 +25,8 @@ uint64_t get_Num_from_cmd(int argc, char** argv, int rank){
         N = 1024 * M_num;
     } else if(strcmp(Num_str, "4G")==0){
         N = 4 * 1024 * M_num;
+    } else if(is_test){
+        N = atoi(Num_str);
     } else{
         printf("Number Error !\n");
         return 1;
