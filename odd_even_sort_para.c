@@ -86,6 +86,9 @@ void odd_even_sort_parallel(float *arr, uint64_t n, int rank, int size) {
     
     // MPI_Scatter(arr, send_num, MPI_FLOAT, local_arr, send_num, MPI_FLOAT, 0, MPI_COMM_WORLD);
     if(local_n <= (uint64_t)INT_MAX){
+        if(rank==0){
+            printf("local_n{%lu} <= INT_MAX\n", local_n);
+        }
         MPI_Scatter(arr, (int)local_n, MPI_FLOAT, local_arr, (int)local_n, MPI_FLOAT, 0, MPI_COMM_WORLD);
     } else{
         if(rank==0){
@@ -95,9 +98,7 @@ void odd_even_sort_parallel(float *arr, uint64_t n, int rank, int size) {
                 MPI_Send_Large(&(arr[local_n * i]), local_n, MPI_FLOAT, i, i * 1000, MPI_COMM_WORLD, sizeof(float));
             }
         } else{
-            for(int i = 1; i < size; i++){
-                MPI_Recv_Large(local_arr, local_n, MPI_FLOAT, 0, i * 1000, MPI_COMM_WORLD, &status, sizeof(float));
-            }
+            MPI_Recv_Large(local_arr, local_n, MPI_FLOAT, 0, rank * 1000, MPI_COMM_WORLD, &status, sizeof(float));
         }
     }
     // printf("%d: scatter compelete!\n", rank);
@@ -177,20 +178,20 @@ void odd_even_sort_parallel(float *arr, uint64_t n, int rank, int size) {
         // MPI_Allreduce(&sorted_local, &global_sorted, 1, MPI_INT, MPI_LAND, MPI_COMM_WORLD);
         // sorted_local = global_sorted;
     }
-    if(local_n <= (uint64_t)INT_MAX){
-        MPI_Gather(local_arr, (int)local_n, MPI_FLOAT, arr, (int)local_n, MPI_FLOAT, 0, MPI_COMM_WORLD);
-    } else{
-        if(rank==0){
-            memcpy(arr, local_arr, local_n);
-            for(int j = 1; j < size; j++){
-                MPI_Recv_Large(&(arr[local_n * j]), local_n, MPI_FLOAT, j, j * 1000, MPI_COMM_WORLD, &status, sizeof(float));
-            }
-        } else{
-            for(int j = 1; j < size; j++){
-                MPI_Send_Large(local_arr, local_n, MPI_FLOAT, 0, j * 1000, MPI_COMM_WORLD, sizeof(float));
-            }
+    // if(local_n <= (uint64_t)INT_MAX){
+    //     printf("local_n{%lu} <= INT_MAX\n", local_n);
+    // // MPI_Gather在数据量太大的情况下会报错，不管local_n是不是超过INT_MAX，都会报错！！！
+    //     MPI_Gather(local_arr, (int)local_n, MPI_FLOAT, arr, (int)local_n, MPI_FLOAT, 0, MPI_COMM_WORLD);
+    // } else{ 
+    if(rank==0){
+        memcpy(arr, local_arr, local_n);
+        for(int j = 1; j < size; j++){
+            MPI_Recv_Large(&(arr[local_n * j]), local_n, MPI_FLOAT, j, j * 1000, MPI_COMM_WORLD, &status, sizeof(float));
         }
+    } else{
+        MPI_Send_Large(local_arr, local_n, MPI_FLOAT, 0, rank * 1000, MPI_COMM_WORLD, sizeof(float));
     }
+    // }
     
     free(local_arr);
 }

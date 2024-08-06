@@ -2,6 +2,9 @@
     "files.associations": {
         "type_traits": "c",
         "limits.h": "c",
-        "stdint.h": "c"
-    }
+        "stdint.h": "c",
+        "time.h": "c",
+        "mpi.h": "c"
+    },
+    "cmake.configureOnOpen": false
 }
