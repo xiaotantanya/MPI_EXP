@@ -5,11 +5,14 @@ mpirun --mca pml ob1 --mca btl tcp,self \
     -H pc --mca btl_tcp_if_include eno1 -n 1 ./odd_even_sort 256M : \
     -H ubuntu --mca btl_tcp_if_include enp13s0f0,enp13s0f1 -n 1 ./odd_even_sort 256M
 
+
+## 多节点运行指令
+在203，204服务器上
 mpiexec --mca pml ob1 --mca btl tcp,self --mca btl_tcp_if_include 202.38.247.204/24 -n 8 --hostfile host ./odd_even_sort 256M
 
 
 ## 注意
-需要看懂https://github.com/open-mpi/ompi/issues/4963
+需要看懂https://github.com/open-mpi/ompi/issues/4963（已看懂）
 
 ## MPI_Send 和 MPI_Recv死锁问题
 相关链接：
@@ -22,3 +25,4 @@ https://blog.csdn.net/susan_wang1/article/details/50068439
 结论：不一定会报错，缓冲区没满的时候就不会报错，传递数据太多就会导致死锁。
 
 ![死锁示意图](/image/image.png)
+
