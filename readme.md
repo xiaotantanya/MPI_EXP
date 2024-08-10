@@ -10,6 +10,7 @@ mpirun --mca pml ob1 --mca btl tcp,self \
 在203，204服务器上
 mpiexec --mca pml ob1 --mca btl tcp,self --mca btl_tcp_if_include 202.38.247.204/24 -n 8 --hostfile host ./odd_even_sort 256M
 
+mpiexec --mca pml ob1 --mca btl tcp,self --mca btl_tcp_if_include 202.38.247.204/24 -n 8 --hostfile host ./PSRS 256M
 
 ## 注意
 需要看懂https://github.com/open-mpi/ompi/issues/4963（已看懂）

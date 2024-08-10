@@ -6,15 +6,27 @@
 #include <limits.h>
 #include <string.h>
 
-// 定义一个发送字节数，接收字节数变量来完成。
-#define CACULATE_TRANSFER_DATA 1
+// #define CACULATE_TRANSFER_DATA 
 // 是否进行排序结果验证
-#define CHECK 1
+#define CHECK 
+// 是否输出语句
+// #define DEBUG
+// 是否记录每个步骤时间
+// #define STEPTIME
+// 初始数据形态，0代表随机，1代表完全逆序，2代表完全顺序， 3代表近似顺序
+const int initial_data = 0;
 
 void matrix_gen(float *a, uint64_t N, float seed);
 uint64_t get_Num_from_cmd(int argc, char **argv, int rank, int is_test);
+void check_correct(float* sort_arr, char* check_file, uint64_t N);
+void gen_correct_file(char* check_file, uint64_t N, int rank, int force, int is_test, float seed);
+
 
 int compare(const void *a, const void *b){
+    return (*(float*)a - *(float*)b > 0 ? 1 : -1);
+}
+
+int re_compare(const void *a, const void *b){
     return (*(float*)a - *(float*)b > 0 ? 1 : -1);
 }
 
@@ -33,14 +45,17 @@ int check_sort(float* arr, float* local_sorted_arr, uint64_t start_index, uint64
 int MPI_Send_Large(void *buf, uint64_t count, MPI_Datatype datatype, int dest, int tag, MPI_Comm comm, int element_size) {
     uint64_t int_max = (uint64_t)(INT_MAX);
     uint64_t block_num = count / int_max;
-    printf("send_block_num = %lu\n", block_num);
+    #ifdef DEBUG
+        printf("send_block_num = %lu\n", block_num);
+    #endif
     for (uint64_t block_id = 0; block_id < block_num; block_id++){
         MPI_Send(&(buf[block_id * int_max * (uint64_t)element_size]), INT_MAX, datatype, dest, tag + (int)block_id, comm);
-        printf("address of %lu * int_max position: %p\n", block_id, &(buf[block_id * int_max]));
     }
     if(count- int_max * block_num != 0){
         MPI_Send(&(buf[block_num*int_max * (uint64_t)element_size]), (int)(count - int_max*block_num), datatype, dest, tag + (int)block_num, comm);
-        printf(" send extend last elements\n");
+        #ifdef DEBUG
+            printf(" send extend last elements\n");
+        #endif
     }
     
 }
@@ -48,13 +63,17 @@ int MPI_Send_Large(void *buf, uint64_t count, MPI_Datatype datatype, int dest, i
 int MPI_Recv_Large(void *buf, uint64_t count, MPI_Datatype datatype, int source, int tag, MPI_Comm comm, MPI_Status* status, int element_size) {
     uint64_t int_max = (uint64_t)(INT_MAX);
     uint64_t block_num = count / int_max;
-    printf("recv_block_num = %lu\n", block_num);
+    #ifdef DEBUG
+        printf("recv_block_num = %lu\n", block_num);
+    #endif
     for (uint64_t block_id = 0; block_id < block_num; block_id++){
         MPI_Recv(&(buf[block_id * int_max * (uint64_t)element_size]), INT_MAX, datatype, source, tag + (int)block_id, comm, status);
     }
     if(count- int_max * block_num != 0){
         MPI_Recv(&(buf[block_num * int_max * (uint64_t)element_size]), (int)(count- int_max * block_num), datatype, source, tag + (int)block_num, comm, status);
-        printf(" recv extend last elements\n");
+        #ifdef DEBUG
+            printf(" recv extend last elements\n");
+        #endif
     }   
     
 }
@@ -101,40 +120,80 @@ int MPI_Sendrecv_Large(void *sendbuf, uint64_t sendcount, MPI_Datatype sendtype,
 }
 
 void PSRS(float *arr, uint64_t n, int rank, int size){
+    // 定义两个变量来存储发送总量和接收总量
+    uint64_t send_count = 0;
+    uint64_t recv_count = 0;
+    // 记录每个步骤排序时间
+    clock_t step_start[7];
+    clock_t step_end[7];
+
     uint64_t local_n = n / size;
+    #ifdef DEBUG
+        if(rank == 0){
+            printf("local_n: %lu\n", local_n);
 
-    printf("local_n: %lu\n", local_n);
-
-    if(local_n > (uint64_t)INT_MAX){
-        printf("Warning: data loss may occur during conversion.\n");
-    }
+            if(local_n > (uint64_t)INT_MAX){
+                printf("Warning: data loss may occur during conversion.\n");
+            }
+        }
+    #endif
 
     float *local_arr = (float*)malloc(local_n * sizeof(float));
     MPI_Status status;
 
-    if(local_n <= (uint64_t)INT_MAX){
+    #ifdef STEPTIME
         if(rank == 0){
-            printf("local_n{%lu} <= INT_MAX\n", local_n);
+            step_start[0] = clock();
         }
+    #endif
+    if(local_n <= (uint64_t)INT_MAX){
+        #ifdef DEBUG
+            if(rank == 0){
+                printf("local_n{%lu} <= INT_MAX\n", local_n);
+            }
+        #endif
         MPI_Scatter(arr, (int)local_n, MPI_FLOAT, local_arr, (int)local_n, MPI_FLOAT, 0, MPI_COMM_WORLD);
     } else{
         if(rank == 0){
+            // rank==0的时候，我们直接将数据复制到local_arr中
             memcpy(local_arr, arr, local_n * sizeof(float));
             for(int i = 1; i < size; i++){
-                MPI_Send_Large(&(arr[local_n * i]), local_n, MPI_FLOAT, i, i*1000, MPI_COMM_WORLD, sizeof(float));
+                MPI_Send_Large(&(arr[local_n * i]), local_n, MPI_FLOAT, i, i * 1000, MPI_COMM_WORLD, sizeof(float));
             }
         } else{
             MPI_Recv_Large(local_arr, local_n, MPI_FLOAT, 0, rank * 1000, MPI_COMM_WORLD, &status, sizeof(float));
         }
     }
+    #ifdef STEPTIME
+        if(rank == 0){
+            step_end[0] = clock();
+        }
+    #endif
+    #ifdef CACULATE_TRANSFER_DATA
+        if(rank == 0){
+            send_count += local_n * (size - 1) * sizeof(float);
+        } else{
+            recv_count += local_n * sizeof(float);
+        }
+    #endif
 
-    if(rank == 0){
-        printf("scatter compelete!\n");
-    }
+    #ifdef DEBUG
+        if(rank == 0){
+            printf("scatter compelete!\n");
+        }
+    #endif
+    #ifdef STEPTIME
+        step_start[1] = clock();
+    #endif
     qsort(local_arr, local_n, sizeof(float), compare);
-    printf("[rank %d]: local quick sort compelete!\n", rank);
+    #ifdef DEBUG
+        printf("[rank %d]: local quick sort compelete!\n", rank);
+    #endif
+    // 保证所有进程都完成了局部排序
     MPI_Barrier(MPI_COMM_WORLD);
-
+    #ifdef STEPTIME
+        step_end[1] = clock();
+    #endif
     // 选出局部数组中的关键元素，共 size-1 个元素。
     float *local_crucial_arr;
     if(local_n % (uint64_t)size != 0){
@@ -146,47 +205,64 @@ void PSRS(float *arr, uint64_t n, int rank, int size){
         free(local_arr);
         exit -1;
     } else{
+        #ifdef STEPTIME
+            step_start[2] = clock();
+        #endif
         local_crucial_arr = (float*)malloc(sizeof(float) * (size - 1));
         uint64_t w = local_n / size;
         for(int i = 1; i < size; i++){
             local_crucial_arr[i - 1] = local_arr[(uint64_t)i * w];
         }
     }
-
-    if(rank == 0){
-        for(int i = 0; i < (size - 1); i++){
-            printf("%f ", local_crucial_arr[i]);
+    #ifdef DEBUG
+        if(rank == 0){
+            for(int i = 0; i < (size - 1); i++){
+                printf("%f ", local_crucial_arr[i]);
+            }
+            printf("\n");
         }
-        printf("\n");
-        printf("local_arr[%lu] = %f\n", local_n / size, local_arr[local_n / size]);
-    }
-    MPI_Barrier(MPI_COMM_WORLD);
-
+        MPI_Barrier(MPI_COMM_WORLD);
+    #endif
     // 将局部数组中的关键元素全发给0进程，然后选出所有进程的关键元素。
     float *total_local_crucial_arr;
     if(rank != 0){
         MPI_Send(local_crucial_arr, size - 1, MPI_FLOAT, 0, rank, MPI_COMM_WORLD);
+        #ifdef CACULATE_TRANSFER_DATA
+            send_count += (size - 1) * sizeof(float);
+        #endif
     } else{
         total_local_crucial_arr = (float*)malloc(sizeof(float) * (size * (size - 1)));
         memcpy(total_local_crucial_arr, local_crucial_arr, (size - 1) * sizeof(float));
-        for(int i = 0; i < (size - 1); i++){
-            printf("%f ", total_local_crucial_arr[i]);
-        }
-        printf("\n");
+        #ifdef DEBUG
+            for(int i = 0; i < (size - 1); i++){
+                printf("%f ", total_local_crucial_arr[i]);
+            }
+            printf("\n");
+        #endif
         for(int i = 1; i < size; i++){
             MPI_Recv(&(total_local_crucial_arr[i * (size - 1)]), size - 1, MPI_FLOAT, i, i, MPI_COMM_WORLD, &status);
+            #ifdef CACULATE_TRANSFER_DATA
+                recv_count += sizeof(float) * (size - 1);
+            #endif
         }
     }
-
-    MPI_Barrier(MPI_COMM_WORLD);
-    if(rank == 0){
-        for(int i = 0; i < (size - 1) * size; i++){
-            printf("%f ", total_local_crucial_arr[i]);
+    #ifdef STEPTIME
+        step_end[2] = clock();
+    #endif
+    #ifdef DEBUG
+        MPI_Barrier(MPI_COMM_WORLD);
+        if(rank == 0){
+            for(int i = 0; i < (size - 1) * size; i++){
+                printf("%f ", total_local_crucial_arr[i]);
+            }
+            printf("\n");
         }
-        printf("\n");
-    }
+    #endif
     
     // 这里我们需要从（size - 1) * size中选出 size - 1 个元素
+    #ifdef STEPTIME
+        step_start[3] = clock();
+    #endif
     float * root_crucial_arr;
     root_crucial_arr = (float*)malloc(sizeof(float)*(size - 1));
     if(rank == 0){
@@ -218,25 +294,39 @@ void PSRS(float *arr, uint64_t n, int rank, int size){
         for(int i = 1; i < size; i++){
             root_crucial_arr[i - 1] = total_local_crucial_arr_tmp[i * (size - 1)];
         }
-        for(int i = 0; i < size * (size - 1); i++){
-            printf("%f ", total_local_crucial_arr_tmp[i]);
-        }
-        printf("\n");
+        #ifdef DEBUG
+            for(int i = 0; i < size * (size - 1); i++){
+                printf("%f ", total_local_crucial_arr_tmp[i]);
+            }
+            printf("\n");
+        #endif
         free(total_local_crucial_arr_tmp);
         free(now_index);
     }
     MPI_Bcast(root_crucial_arr, size - 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
-    // MPI_Barrier(MPI_COMM_WORLD);
-    // printf("root_crucial_arr be sure, size[%d]\n", size - 1);
-    MPI_Barrier(MPI_COMM_WORLD);
-    // if(rank == 0){
+
+    #ifdef STEPTIME
+        step_end[3] = clock();
+    #endif
+
+    #ifdef CACULATE_TRANSFER_DATA
+        if(rank != 0){
+            recv_count += sizeof(float) * (size - 1);
+        } else{
+            send_count += sizeof(float) * (size - 1) * (size - 1);
+        }
+    #endif
+    #ifdef DEBUG
         printf("rank[%d]: ", rank);
         for(int i = 0; i < size - 1; i++){
             printf("%f ", root_crucial_arr[i]);
         }
         printf("\n");
-    // }
-    MPI_Barrier(MPI_COMM_WORLD);
+    #endif
+
+    #ifdef STEPTIME
+        step_start[4] = clock();
+    #endif
     //将本地数据根据主元进行分段，这里保存小段最后一个元素索引来进行分段，第i段元素为[last_ele_index[i], last_ele_index[i+1])
     // 一共有size段
     uint64_t *last_ele_index = (uint64_t*)malloc(sizeof(uint64_t) * (size + 1));
@@ -250,77 +340,89 @@ void PSRS(float *arr, uint64_t n, int rank, int size){
         }
     }
     last_ele_index[size] = local_n;
-    if(rank == 0){
-        printf("%f\n", local_arr[25165830]);
-    }
 
-    MPI_Barrier(MPI_COMM_WORLD);
-    printf("rank[%d]: ", rank);
-    for(int i = 0; i < size + 1; i++){
-        printf("%lu ", last_ele_index[i]);
-    }
-    printf("\n");
-    MPI_Barrier(MPI_COMM_WORLD);
+    #ifdef DEBUG
+        printf("rank[%d]: ", rank);
+        for(int i = 0; i < size + 1; i++){
+            printf("%lu ", last_ele_index[i]);
+        }
+        printf("\n");
+    #endif
+
+    #ifdef STEPTIME
+        step_end[4] = clock();
+        if(rank == 0){
+            step_start[5] = clock();
+        }
+    #endif
+
     // 将每个进程i第j段的数量发给j进程，并接收其他进程第i段的数量。
     uint64_t *ele_number = (uint64_t*)malloc(sizeof(uint64_t) * (size));
     for(int i = 0; i < size; i++){
         ele_number[i] = last_ele_index[i+1] - last_ele_index[i];
     }
 
-    MPI_Barrier(MPI_COMM_WORLD);
-    // if(rank == 0){
-    printf("rank[%d]: ", rank);
-    for(int i = 0; i < size; i++){
-        printf("%lu ", ele_number[i]);
-    }
-    printf("\n");
-    // }
-    MPI_Barrier(MPI_COMM_WORLD);
+    #ifdef DEBUG
+        printf("rank[%d]: ", rank);
+        for(int i = 0; i < size; i++){
+            printf("%lu ", ele_number[i]);
+        }
+        printf("\n");
+    #endif
     // 设置一个变量接收分配给进程的数据大小
-    uint64_t *proc_ele_num = (uint64_t*)malloc(sizeof(uint64_t)*(size));
-    float * proc_data;
+    uint64_t *proc_ele_num = (uint64_t*)malloc(sizeof(uint64_t) * (size));
+    float *proc_data;
     for(int i = 0; i < size; i++){
         if(i != rank){
             MPI_Sendrecv(&(ele_number[i]), 1, MPI_UINT64_T, i, 0,
                 &(proc_ele_num[i]), 1, MPI_UINT64_T, i, 0, MPI_COMM_WORLD, &status);
+            #ifdef CACULATE_TRANSFER_DATA
+                send_count += sizeof(uint64_t) * 1;
+                recv_count += sizeof(uint64_t) * 1;
+            #endif
         } else {
             proc_ele_num[i] = ele_number[i];
         }
     }
-    MPI_Barrier(MPI_COMM_WORLD);
-    if(rank == 0){
-        for(int i = 0; i < size; i++){
-            printf("%lu ", proc_ele_num[i]);
+
+    #ifdef DEBUG
+        if(rank == 0){
+            for(int i = 0; i < size; i++){
+                printf("%lu ", proc_ele_num[i]);
+            }
+            printf("\n");
         }
-        printf("\n");
-    }
+    #endif
     uint64_t sum = 0;
     for(int i = 0; i < size; i++){
         sum += proc_ele_num[i];
     }
-    // if(rank == 0){
-    MPI_Barrier(MPI_COMM_WORLD);
-    printf("rank[%d]: ", rank);
-    printf("sum = %lu\n", sum);
-    // }
-    if(CHECK && rank != 0){
-        MPI_Send(&sum, 1, MPI_UINT64_T, 0, 345, MPI_COMM_WORLD);
-    }
+
+    #ifdef DEBUG
+        printf("rank[%d]: ", rank);
+        printf("sum = %lu\n", sum);
+    #endif
+
+    #ifdef CHECK
+        if(rank != 0){
+            MPI_Send(&sum, 1, MPI_UINT64_T, 0, 345, MPI_COMM_WORLD);
+        }
+    #endif
     
-    MPI_Barrier(MPI_COMM_WORLD);
     uint64_t *proc_start_index = malloc(sizeof(uint64_t) * (size));
     proc_start_index[0] = 0;
     for(int i = 1; i < size; i++){
         proc_start_index[i] = proc_start_index[i-1] + proc_ele_num[i-1];
     }
-    MPI_Barrier(MPI_COMM_WORLD);
-    printf("rank[%d]: ", rank);
-    // if(rank == 0){
+
+    #ifdef DEBUG
+        printf("rank[%d]: ", rank);
         for(int i = 0; i < size; i++){
             printf("%lu ", proc_start_index[i]);
         }
         printf("\n");
-    // }
+    #endif
+
     proc_data = (float*)malloc(sizeof(float) * sum);
     for(int i = 0; i < size; i++){
         if(ele_number[i] > (uint64_t)INT_MAX || proc_ele_num[i] > (uint64_t)INT_MAX){
@@ -340,12 +442,22 @@ void PSRS(float *arr, uint64_t n, int rank, int size){
         if(i != rank){
             MPI_Sendrecv(&(local_arr[last_ele_index[i]]), ele_number[i], MPI_FLOAT, i, 0,
                     &(proc_data[proc_start_index[i]]), proc_ele_num[i], MPI_FLOAT, i, 0, MPI_COMM_WORLD, &status);
+            #ifdef CACULATE_TRANSFER_DATA
+                send_count += sizeof(float) * ele_number[i];
+                recv_count += sizeof(float) * proc_ele_num[i];
+            #endif
         } else{
             memcpy(&(proc_data[proc_start_index[i]]), &(local_arr[last_ele_index[i]]), ele_number[i] * sizeof(float));
         }
     }
-    MPI_Barrier(MPI_COMM_WORLD);
 
+    MPI_Barrier(MPI_COMM_WORLD);
+    #ifdef STEPTIME
+        if(rank == 0){
+            step_end[5] = clock();
+        }
+        step_start[6] = clock();
+    #endif
     //每个进程进行局部归并排序
     float *sort_proc_data = (float*)malloc(sizeof(float) * sum);
     uint64_t *now_index = (uint64_t*)malloc(sizeof(uint64_t) * (size));
@@ -378,17 +490,32 @@ void PSRS(float *arr, uint64_t n, int rank, int size){
         }
         sort_num = sort_num + 1;
     }
+    #ifdef STEPTIME
+        step_end[6] = clock();
+        if(rank == 0){
+            printf("rank[0]:  step 1 time: %f\n", (double)(step_end[0] - step_start[0]) / CLOCKS_PER_SEC);
+        }
+        for(int j = 1; j < 5; j++){
+            printf("rank[%d]: step %d time: %f\n", rank, j + 1, (double)(step_end[j] - step_start[j]) / CLOCKS_PER_SEC);
+        }
+        if(rank == 0){
+            printf("rank[0]:  step 6 time: %f\n", (double)(step_end[5] - step_start[5]) / CLOCKS_PER_SEC);
+        }
+        printf("rank[%d]: step 7 time: %f\n", rank, (double)(step_end[6] - step_start[6]) / CLOCKS_PER_SEC);
+    #endif
 
-    printf("rank[%d]: ", rank);
-    for(int i = 0; i < 10; i++){
-        printf("%f ", sort_proc_data[i]);
-    }
-    printf("\n");
+    #ifdef DEBUG
+        printf("rank[%d]: ", rank);
+        for(int i = 0; i < 10; i++){
+            printf("%f ", sort_proc_data[i]);
+        }
+        printf("\n");
+    #endif
     // 测试结果是否准确
-    if(CHECK){
+    #ifdef CHECK
         uint64_t *local_sum = (uint64_t*)malloc(sizeof(uint64_t) * size);
         uint64_t *start_index = (uint64_t*)malloc(sizeof(uint64_t) * size);
-        float *sorted_data = (float*)malloc(sizeof(float) * n);
+        // float *sorted_data = (float*)malloc(sizeof(float) * n);
         if(rank == 0){
             for(int i = 1; i < size; i++){
                 MPI_Recv(&(local_sum[i]), 1, MPI_UINT64_T, i, 345, MPI_COMM_WORLD, &status);
@@ -398,38 +525,41 @@ void PSRS(float *arr, uint64_t n, int rank, int size){
             for(int i = 1; i < size; i++){
                 start_index[i] = start_index[i - 1] + local_sum[i - 1]; 
             }
-            printf("rank[%d]: ", rank);
-            for(int i = 0; i < size; i++){
-                printf("%lu ", local_sum[i]);
-            }
-            printf("\n");
+            #ifdef DEBUG
+                printf("rank[%d]: ", rank);
+                for(int i = 0; i < size; i++){
+                    printf("%lu ", local_sum[i]);
+                }
+                printf("\n");
+            #endif
             for(int i = 1; i < size; i++){
-                MPI_Recv(&(sorted_data[start_index[i]]), local_sum[i], MPI_FLOAT, i, 254, MPI_COMM_WORLD, &status);
+                MPI_Recv(&(arr[start_index[i]]), local_sum[i], MPI_FLOAT, i, 254, MPI_COMM_WORLD, &status);
             }
-            memcpy(sorted_data, sort_proc_data, sum * sizeof(float));
-            qsort(arr, n, sizeof(float), compare);
-            int correct = memcmp(sorted_data, arr, sizeof(float) * n);
-            char* correct_str = (correct == 0 ? "true" : "false");
-            printf("rank[%d]: sort correct: %s\n", rank, correct_str);
+            memcpy(arr, sort_proc_data, sum * sizeof(float));
+
         } else{
             MPI_Send(sort_proc_data, sum, MPI_FLOAT, 0, 254, MPI_COMM_WORLD);
         }
         
-        // MPI_Bcast(start_index, size, MPI_UINT64_T, 0, MPI_COMM_WORLD);
-        printf("rank[%d] start_index: ", rank);
-        for(int i = 0; i < size; i++){
-            printf("%lu ", start_index[i]);
+        if(rank == 0){
+            for(int i = 0; i < size; i++){
+                printf("%lu ", start_index[i]);
+            }
+            printf("\n");
         }
-        printf("\n");
-        MPI_Barrier(MPI_COMM_WORLD);
-        
-
         
         free(local_sum);
         free(start_index);
-        free(sorted_data);
-    }
-    MPI_Barrier(MPI_COMM_WORLD);
+    #endif
+
+    #ifdef CACULATE_TRANSFER_DATA
+        printf("rank[%d]: ", rank);
+        printf("send message count: %lu Byte.\n", send_count);
+        printf("rank[%d]: ", rank);
+        printf("recv message count: %lu Byte.\n", recv_count);
+        MPI_Barrier(MPI_COMM_WORLD);
+    #endif
+    
     if (rank == 0){
         free(total_local_crucial_arr);
     }
@@ -470,6 +600,24 @@ int main(int argc, char *argv[]){
     if(rank == 0){
         arr = (float*)malloc(N * sizeof(float));
         matrix_gen(arr, N, seed);
+        if(initial_data == 1){
+            qsort(arr, N, sizeof(float), re_compare);
+        } else if(initial_data == 2){
+            qsort(arr, N, sizeof(float), compare);
+        } else if(initial_data == 3){
+            qsort(arr, N, sizeof(float), compare);
+            uint64_t exchange_num  = 0;
+            uint64_t exchange_total = (uint64_t)N / (uint64_t)100;
+            while(exchange_num < exchange_total){
+                uint64_t rand_index = ((uint64_t)rand() / (uint64_t)RAND_MAX) * (N - 1);
+                if(arr[rand_index] != arr[rand_index + 1]){
+                    float temp = arr[rand_index];
+                    arr[rand_index] = arr[rand_index + 1];
+                    arr[rand_index + 1] = temp;
+                    exchange_num += 1;
+                }
+            }
+        }
         start_time = clock();
     }
 
@@ -493,6 +641,15 @@ int main(int argc, char *argv[]){
             }
             printf("\n");
         }
+
+        #ifdef CHECK
+            char check_file[20] = "./sorted_";
+            strcat(check_file, argv[1]);
+            printf("check file: %s\n", check_file);
+            gen_correct_file(check_file, N, 0, 0, 0, seed);
+            check_correct(arr, check_file, N);
+        #endif
+
         free(arr);
     }
     

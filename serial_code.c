@@ -3,9 +3,13 @@
 #include <stdlib.h>
 #include <strings.h>
 #include <time.h>
+#include <unistd.h>
+#include <string.h>
 
 void matrix_gen(float *a, uint64_t N, float seed);
 uint64_t get_Num_from_cmd(int argc, char** argv);
+void check_correct(float* sort_arr, char* check_file, uint64_t N);
+void gen_correct_file(char* check_file, uint64_t N, int rank, int force, int is_test, float seed);
 
 int compare (const void * a, const void * b)
 {
@@ -42,6 +46,12 @@ int main(int argc, char** argv){
     // 打印排序时间
     printf("qsort took %f seconds to sort %s elements.\n", time_taken, argv[1]);
 
+
+    char check_file[20] = "./sorted_";
+    strcat(check_file, argv[1]);
+    printf("check file: %s\n", check_file);
+    gen_correct_file(check_file, N, 0, 1, 0, seed);
+    check_correct(a, check_file, N);
     // 释放内存
     free(a);
 }

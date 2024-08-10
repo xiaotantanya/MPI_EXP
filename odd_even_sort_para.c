@@ -6,12 +6,33 @@
 #include <limits.h>
 #include <string.h>
 
+// 是否计算每个进程发送，接收数据量
+#define CACULATE_TRANSFER_DATA 
+// 是否进行排序结果验证
+#define CHECK 
+// 是否输出语句
+#define DEBUG
+// 是否计算并输出每段花费时间
+#define STEPTIME
+
+// 初始数据形态，0代表随机，1代表完全逆序，2代表完全顺序， 3代表近似顺序
+const int initial_data = 0;
+
 void matrix_gen(float *a, uint64_t N, float seed);
 uint64_t get_Num_from_cmd(int argc, char** argv, int rank, int is_test);
+void check_correct(float* sort_arr, char* check_file, uint64_t N);
+void gen_correct_file(char* check_file, uint64_t N, int rank, int force, int is_test, float seed);
 
+// 顺序
 int compare (const void * a, const void * b)
 {
     return ( *(float*)a - *(float*)b > 0 ? 1 :- 1);
+}
+
+// 逆序
+int re_compare (const void * a, const void * b)
+{
+    return ( *(float*)a - *(float*)b > 0 ? -1 : 1);
 }
 
 int MPI_Send_Large(void *buf, uint64_t count, MPI_Datatype datatype, int dest, int tag, MPI_Comm comm, int element_size) {
@@ -69,45 +90,100 @@ int MPI_Sendrecv_Large(void *sendbuf, uint64_t sendcount, MPI_Datatype sendtype,
     }
 
 void odd_even_sort_parallel(float *arr, uint64_t n, int rank, int size) {
-    uint64_t local_n = n / size;
-    // printf("n: %ld\n", n);
-    // printf("size: %d\n", size);
-    printf("local_n: %lu\n", local_n);
+    // 定义两个变量来存储发送总量和接收总量
+    uint64_t send_count = 0;
+    uint64_t recv_count = 0;
+    // 定义记录步骤时间的变量
+    clock_t one_step_start, one_step_end;
+    clock_t two_step_start, two_step_end;
+    clock_t three_step_start, three_step_end;
+    clock_t four_step_start, four_step_end;
+    double time_taken;
 
-    // 检查是否会丢失数据
-    if (local_n > UINT_MAX) {
-        printf("Warning: data loss may occur during conversion.\n");
-    }
-    // 强制转换
-    // int send_num = (int)local_n;
+    uint64_t local_n = n / size;
+
+    #ifdef DEBUG
+        if(rank == 0){
+            printf("local_n: %lu\n", local_n);
+
+            if(local_n > (uint64_t)INT_MAX){
+                printf("Warning: data loss may occur during conversion.\n");
+            }
+        }
+    #endif
 
     float *local_arr = (float *)malloc(local_n * sizeof(float));
     MPI_Status status;
     
     // MPI_Scatter(arr, send_num, MPI_FLOAT, local_arr, send_num, MPI_FLOAT, 0, MPI_COMM_WORLD);
+
+    #ifdef STEPTIME
+        one_step_start = clock();
+    #endif
     if(local_n <= (uint64_t)INT_MAX){
-        if(rank==0){
-            printf("local_n{%lu} <= INT_MAX\n", local_n);
-        }
+        #ifdef DEBUG
+            if(rank == 0){
+                printf("local_n{%lu} <= INT_MAX\n", local_n);
+            }
+        #endif
         MPI_Scatter(arr, (int)local_n, MPI_FLOAT, local_arr, (int)local_n, MPI_FLOAT, 0, MPI_COMM_WORLD);
     } else{
         if(rank==0){
             // rank==0的时候，我们直接将数据复制到local_arr中
             memcpy(local_arr, arr, local_n * sizeof(float));
-            for(int i=1;i<size;i++){
+            for(int i = 1; i < size; i++){
                 MPI_Send_Large(&(arr[local_n * i]), local_n, MPI_FLOAT, i, i * 1000, MPI_COMM_WORLD, sizeof(float));
             }
         } else{
             MPI_Recv_Large(local_arr, local_n, MPI_FLOAT, 0, rank * 1000, MPI_COMM_WORLD, &status, sizeof(float));
         }
     }
-    // printf("%d: scatter compelete!\n", rank);
-    //局部排序(快排)
-    qsort(local_arr, local_n, sizeof(float), compare);
-    printf("%d: local quick sort compelete!\n", rank);
-    MPI_Barrier(MPI_COMM_WORLD);
 
-        // 奇数阶段和偶数阶段切换
+    #ifdef STEPTIME
+        MPI_Barrier(MPI_COMM_WORLD);
+        one_step_end = clock();
+        if(rank == 0){
+            time_taken = (double)(one_step_end - one_step_start) / CLOCKS_PER_SEC;
+            printf("first step time: %f\n", time_taken);
+        }
+    #endif
+
+    #ifdef CACULATE_TRANSFER_DATA
+        if(rank == 0){
+            send_count += local_n * (size - 1) * sizeof(float);
+        } else{
+            recv_count += local_n * sizeof(float);
+        }
+    #endif
+    
+    #ifdef DEBUG
+        if(rank == 0){
+            printf("scatter compelete!\n");
+        }
+    #endif
+    //局部排序(快排)
+    #ifdef STEPTIME
+        two_step_start = clock();
+    #endif
+    qsort(local_arr, local_n, sizeof(float), compare);
+    
+    // #ifdef DEBUG
+    //     printf("[rank %d]: local quick sort compelete!\n", rank);
+    //     printf("rank[%d]: ", rank);
+    //     for(int i = 0; i < 32; i++){
+    //         printf("%f ", local_arr[i * 1024 * 1024]);
+    //     }
+    //     printf("\n");
+    // #endif
+    // 保证所有进程都完成了局部排序
+    MPI_Barrier(MPI_COMM_WORLD);
+    #ifdef STEPTIME
+        two_step_end = clock();
+        time_taken = (double)(two_step_end - two_step_start) / CLOCKS_PER_SEC;
+        printf("second step time: %f\n", time_taken);
+        three_step_start = clock();
+    #endif
+    // 奇数阶段和偶数阶段切换
     for (int phase = 0; phase < size; phase++) {
         int partner = (phase + rank) % 2 == 0 ? rank + 1 : rank - 1;
         if (partner >= 0 && partner < size) {
@@ -119,8 +195,12 @@ void odd_even_sort_parallel(float *arr, uint64_t n, int rank, int size) {
                 MPI_Sendrecv_Large(local_arr, local_n, MPI_FLOAT, partner, 2024,
                             recv_arr, local_n, MPI_FLOAT, partner, 2024, MPI_COMM_WORLD, MPI_STATUS_IGNORE, sizeof(float));
             }
+
+            #ifdef CACULATE_TRANSFER_DATA
+                send_count += local_n * sizeof(float);
+                recv_count += local_n * sizeof(float);
+            #endif
             
-            // printf("38\n");
             float *temp_arr = (float*)malloc(2 * local_n * sizeof(float));
             if (rank < partner) {
                 for (uint64_t i = 0; i < local_n; i++) temp_arr[i] = local_arr[i];
@@ -142,6 +222,13 @@ void odd_even_sort_parallel(float *arr, uint64_t n, int rank, int size) {
                     local_index = local_index + 1;
                     // printf("rank < partner local_index: %lu\n", local_index);
                 }
+                // #ifdef DEBUG
+                //     printf("rank[%d]: ", rank);
+                //     for(int i = 0; i < 32; i++){
+                //         printf("%f ", local_arr[i * 1024 * 1024]);
+                //     }
+                //     printf("\n");
+                // #endif
                 //两个指针，偏移
                 //加一步local_arr赋值操作
             } else {
@@ -152,8 +239,7 @@ void odd_even_sort_parallel(float *arr, uint64_t n, int rank, int size) {
                 float* second_point = temp_arr + 2 * local_n - 1;
                 uint64_t  local_index = local_n - 1;
                 uint64_t local_sum = 0;
-                // printf("init local index: %lu\n", local_index);
-                // printf("69\n");
+
                 while(local_sum < local_n){
                     if (*first_point < *second_point){
                         local_arr[local_index] = *second_point;
@@ -164,9 +250,7 @@ void odd_even_sort_parallel(float *arr, uint64_t n, int rank, int size) {
                     }
                     local_index = local_index - 1;
                     local_sum = local_sum + 1;
-                    // printf("rank > partner local_index: %llu\n", local_index);
-                    // printf("rank > partner local_sum: %llu\n", local_sum);
-                    // printf("rank > partner local_n: %llu\n", local_n);
+
                 }
             }
             
@@ -174,25 +258,57 @@ void odd_even_sort_parallel(float *arr, uint64_t n, int rank, int size) {
             free(temp_arr);
         }
         MPI_Barrier(MPI_COMM_WORLD);
-        // int global_sorted;
-        // MPI_Allreduce(&sorted_local, &global_sorted, 1, MPI_INT, MPI_LAND, MPI_COMM_WORLD);
-        // sorted_local = global_sorted;
+        
     }
-    // if(local_n <= (uint64_t)INT_MAX){
-    //     printf("local_n{%lu} <= INT_MAX\n", local_n);
-    // // MPI_Gather在数据量太大的情况下会报错，不管local_n是不是超过INT_MAX，都会报错！！！
-    //     MPI_Gather(local_arr, (int)local_n, MPI_FLOAT, arr, (int)local_n, MPI_FLOAT, 0, MPI_COMM_WORLD);
-    // } else{ 
+    #ifdef STEPTIME
+        three_step_end = clock();
+        time_taken = (double)(three_step_end - three_step_start) / CLOCKS_PER_SEC;
+        printf("third step time: %f\n", time_taken);
+    #endif
+
+    #ifdef DEBUG
+        // printf("[rank %d]: local quick sort compelete!\n", rank);
+        printf("rank[%d]: ", rank);
+        for(int i = 0; i < 32; i++){
+            printf("%f ", local_arr[i * 1024 * 1024]);
+        }
+        printf("\n");
+    #endif
+
+    #ifdef STEPTIME
+        four_step_start = clock();
+    #endif
     if(rank==0){
-        memcpy(arr, local_arr, local_n);
+        // float* sorted_arr = (float*)malloc(sizeof(float) * n);
+        memcpy(arr, local_arr, local_n * sizeof(float));
         for(int j = 1; j < size; j++){
             MPI_Recv_Large(&(arr[local_n * j]), local_n, MPI_FLOAT, j, j * 1000, MPI_COMM_WORLD, &status, sizeof(float));
+            #ifdef CACULATE_TRANSFER_DATA
+                recv_count += local_n * sizeof(float);
+            #endif
         }
+
+        // #ifdef CHECK
+        //     qsort(arr, n, sizeof(float), compare);
+        //     int correct = memcmp(arr, sorted_arr, sizeof(float) * n);
+        //     char* correct_str = (correct == 0 ? "true" : "false");
+        //     printf("rank[%d]: sort correct: %s\n", rank, correct_str);
+        // #endif
+
+        // free(sorted_arr);  
     } else{
         MPI_Send_Large(local_arr, local_n, MPI_FLOAT, 0, rank * 1000, MPI_COMM_WORLD, sizeof(float));
+        #ifdef CACULATE_TRANSFER_DATA
+            send_count += local_n * sizeof(float);
+        #endif
     }
-    // }
-    
+
+    #ifdef STEPTIME
+        four_step_end = clock();
+        time_taken = (double)(four_step_end - four_step_start) / CLOCKS_PER_SEC;
+        printf("third step time: %f\n", time_taken);
+    #endif
+
     free(local_arr);
 }
 
@@ -231,6 +347,24 @@ int main(int argc, char *argv[]) {
         // printf("Unsorted array:\n");
         // for (int i = 0; i < N; i++) printf("%f ", arr[i]);
         // printf("\n");
+        if(initial_data == 1){
+            qsort(arr, N, sizeof(float), re_compare);
+        } else if(initial_data == 2){
+            qsort(arr, N, sizeof(float), compare);
+        } else if(initial_data == 3){
+            qsort(arr, N, sizeof(float), compare);
+            uint64_t exchange_num  = 0;
+            uint64_t exchange_total = (uint64_t)N / (uint64_t)100;
+            while(exchange_num < exchange_total){
+                uint64_t rand_index = ((uint64_t)rand() / (uint64_t)RAND_MAX) * (N - 1);
+                if(arr[rand_index] != arr[rand_index + 1]){
+                    float temp = arr[rand_index];
+                    arr[rand_index] = arr[rand_index + 1];
+                    arr[rand_index + 1] = temp;
+                    exchange_num += 1;
+                }
+            }
+        }
         start_time = clock();
     }
 
@@ -249,13 +383,18 @@ int main(int argc, char *argv[]) {
         // 计算排序时间
         double time_taken = (double)(end_time - start_time) / CLOCKS_PER_SEC;
         // 打印排序时间
-        printf("qsort took %f seconds to sort %s elements.\n", time_taken, argv[1]);
-        if(is_test) {
-            for (uint64_t i = 0; i < N; i++){
-                printf("%f ", arr[i]);
-            }
-            printf("\n");
+        for(int i = 0; i < 20; i++){
+            printf("%f ", arr[1024 * 1024 * i]);
         }
+        printf("\n");
+        printf("odd and even took %f seconds to sort %s elements.\n", time_taken, argv[1]);
+        #ifdef CHECK
+            char check_file[20] = "./sorted_";
+            strcat(check_file, argv[1]);
+            printf("check file: %s\n", check_file);
+            gen_correct_file(check_file, N, 0, 0, 0, seed);
+            check_correct(arr, check_file, N);
+        #endif
         free(arr);
     }
 
