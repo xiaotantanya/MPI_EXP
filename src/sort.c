@@ -93,7 +93,9 @@ void odd_even_sort_parallel(float *arr, uint64_t n, int rank, int size) {
         two_step_end = clock();
         time_taken = (double)(two_step_end - two_step_start) / CLOCKS_PER_SEC;
         printf("rank[%d]: step 2 time: %f s.\n", rank, time_taken);
-        three_step_start = clock();
+        if(rank == 0){
+            three_step_start = clock();
+        }
     #endif
     // 奇数阶段和偶数阶段切换
     for (int phase = 0; phase < size; phase++) {
@@ -166,10 +168,13 @@ void odd_even_sort_parallel(float *arr, uint64_t n, int rank, int size) {
         MPI_Barrier(MPI_COMM_WORLD);
         
     }
+    MPI_Barrier(MPI_COMM_WORLD);
     #ifdef STEPTIME
-        three_step_end = clock();
-        time_taken = (double)(three_step_end - three_step_start) / CLOCKS_PER_SEC;
-        printf("rank[%d]: step 3 time: %f s.\n", rank, time_taken);
+        if(rank == 0){
+            three_step_end = clock();
+            time_taken = (double)(three_step_end - three_step_start) / CLOCKS_PER_SEC;
+            printf("rank[%d]: step 3 time: %f s.\n", rank, time_taken);
+        }
     #endif
 
     #ifdef DEBUG
@@ -182,7 +187,9 @@ void odd_even_sort_parallel(float *arr, uint64_t n, int rank, int size) {
     #endif
 
     #ifdef STEPTIME
-        four_step_start = clock();
+        if(rank == 0){
+            four_step_start = clock();
+        }
     #endif
     if(rank==0){
         // float* sorted_arr = (float*)malloc(sizeof(float) * n);
@@ -202,9 +209,19 @@ void odd_even_sort_parallel(float *arr, uint64_t n, int rank, int size) {
     }
 
     #ifdef STEPTIME
-        four_step_end = clock();
-        time_taken = (double)(four_step_end - four_step_start) / CLOCKS_PER_SEC;
-        printf("rank[%d]: step 4 time: %f s.\n", rank, time_taken);
+        if(rank == 0){
+            four_step_end = clock();
+            time_taken = (double)(four_step_end - four_step_start) / CLOCKS_PER_SEC;
+            printf("rank[%d]: step 4 time: %f s.\n", rank, time_taken);
+        } 
+    #endif
+
+    #ifdef CACULATE_TRANSFER_DATA
+        printf("rank[%d]: ", rank);
+        printf("send message count: %lu Byte.\n", send_count);
+        printf("rank[%d]: ", rank);
+        printf("recv message count: %lu Byte.\n", recv_count);
+        MPI_Barrier(MPI_COMM_WORLD);
     #endif
 
     free(local_arr);
@@ -593,6 +610,7 @@ void PSRS(float *arr, uint64_t n, int rank, int size){
             printf("rank[0]:  step 6 time: %f s.\n", (double)(step_end[5] - step_start[5]) / CLOCKS_PER_SEC);
         }
         printf("rank[%d]: step 7 time: %f s.\n", rank, (double)(step_end[6] - step_start[6]) / CLOCKS_PER_SEC);
+        MPI_Barrier(MPI_COMM_WORLD);
     #endif
 
     #ifdef DEBUG

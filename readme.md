@@ -8,7 +8,7 @@ mpirun --mca pml ob1 --mca btl tcp,self \
 
 ## 多节点运行指令
 在203，204服务器上
-mpiexec --mca pml ob1 --mca btl tcp,self --mca btl_tcp_if_include 202.38.247.204/24 -n 8 --hostfile host ./odd_even_sort 256M
+mpiexec --mca pml ob1 --mca btl tcp,self --mca btl_tcp_if_include 202.38.247.204/24 -n 4 --hostfile host ./odd_even_sort 256M
 
 mpiexec --mca pml ob1 --mca btl tcp,self --mca btl_tcp_if_include 202.38.247.204/24 -n 8 --hostfile host ./PSRS 256M
 
