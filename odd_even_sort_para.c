@@ -72,10 +72,6 @@ int main(int argc, char *argv[]) {
         // 计算排序时间
         double time_taken = (double)(end_time - start_time) / CLOCKS_PER_SEC;
         // 打印排序时间
-        for(int i = 0; i < 20; i++){
-            printf("%f ", arr[1024 * 1024 * i]);
-        }
-        printf("\n");
         printf("odd and even took %f seconds to sort %s elements.\n", time_taken, argv[1]);
         #ifdef CHECK
             char check_file[20] = "./sorted_";

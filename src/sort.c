@@ -7,6 +7,7 @@
 
 #include "utils.h"
 #include "sort.h"
+#include "setting.h"
 
 
 void odd_even_sort_parallel(float *arr, uint64_t n, int rank, int size) {
@@ -63,7 +64,7 @@ void odd_even_sort_parallel(float *arr, uint64_t n, int rank, int size) {
         one_step_end = clock();
         if(rank == 0){
             time_taken = (double)(one_step_end - one_step_start) / CLOCKS_PER_SEC;
-            printf("first step time: %f\n", time_taken);
+            printf("rank[0]: step 1 time: %f s.\n", time_taken);
         }
     #endif
 
@@ -91,7 +92,7 @@ void odd_even_sort_parallel(float *arr, uint64_t n, int rank, int size) {
     #ifdef STEPTIME
         two_step_end = clock();
         time_taken = (double)(two_step_end - two_step_start) / CLOCKS_PER_SEC;
-        printf("second step time: %f\n", time_taken);
+        printf("rank[%d]: step 2 time: %f s.\n", rank, time_taken);
         three_step_start = clock();
     #endif
     // 奇数阶段和偶数阶段切换
@@ -168,7 +169,7 @@ void odd_even_sort_parallel(float *arr, uint64_t n, int rank, int size) {
     #ifdef STEPTIME
         three_step_end = clock();
         time_taken = (double)(three_step_end - three_step_start) / CLOCKS_PER_SEC;
-        printf("third step time: %f\n", time_taken);
+        printf("rank[%d]: step 3 time: %f s.\n", rank, time_taken);
     #endif
 
     #ifdef DEBUG
@@ -203,7 +204,7 @@ void odd_even_sort_parallel(float *arr, uint64_t n, int rank, int size) {
     #ifdef STEPTIME
         four_step_end = clock();
         time_taken = (double)(four_step_end - four_step_start) / CLOCKS_PER_SEC;
-        printf("third step time: %f\n", time_taken);
+        printf("rank[%d]: step 4 time: %f s.\n", rank, time_taken);
     #endif
 
     free(local_arr);
@@ -583,15 +584,15 @@ void PSRS(float *arr, uint64_t n, int rank, int size){
     #ifdef STEPTIME
         step_end[6] = clock();
         if(rank == 0){
-            printf("rank[0]:  step 1 time: %f\n", (double)(step_end[0] - step_start[0]) / CLOCKS_PER_SEC);
+            printf("rank[0]:  step 1 time: %f s.\n", (double)(step_end[0] - step_start[0]) / CLOCKS_PER_SEC);
         }
         for(int j = 1; j < 5; j++){
-            printf("rank[%d]: step %d time: %f\n", rank, j + 1, (double)(step_end[j] - step_start[j]) / CLOCKS_PER_SEC);
+            printf("rank[%d]: step %d time: %f s.\n", rank, j + 1, (double)(step_end[j] - step_start[j]) / CLOCKS_PER_SEC);
         }
         if(rank == 0){
-            printf("rank[0]:  step 6 time: %f\n", (double)(step_end[5] - step_start[5]) / CLOCKS_PER_SEC);
+            printf("rank[0]:  step 6 time: %f s.\n", (double)(step_end[5] - step_start[5]) / CLOCKS_PER_SEC);
         }
-        printf("rank[%d]: step 7 time: %f\n", rank, (double)(step_end[6] - step_start[6]) / CLOCKS_PER_SEC);
+        printf("rank[%d]: step 7 time: %f s.\n", rank, (double)(step_end[6] - step_start[6]) / CLOCKS_PER_SEC);
     #endif
 
     #ifdef DEBUG

@@ -73,10 +73,7 @@ void check_correct(float* sort_arr, char* check_file, uint64_t N){
     pd = fopen(check_file, "rb");
     float *read_arr = (float*)malloc(sizeof(float) * N);
     fread(read_arr, sizeof(float), N, pd);
-    for(int i = 0; i < 20; i++){
-        printf("%f ", read_arr[1024 * 1024 * i]);
-    }
-    printf("\n");
+
     int correct = memcmp(sort_arr, read_arr, sizeof(float) * N);
     char* correct_str = (correct == 0 ? "true" : "false");
     printf("rank[%d]: sort correct: %s\n", 0, correct_str);
