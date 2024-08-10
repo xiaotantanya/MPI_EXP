@@ -6,7 +6,10 @@
         "time.h": "c",
         "mpi.h": "c",
         "string.h": "c",
-        "strings.h": "c"
+        "strings.h": "c",
+        "setting.h": "c",
+        "utils.h": "c",
+        "sort.h": "c"
     },
     "cmake.configureOnOpen": false
 }
