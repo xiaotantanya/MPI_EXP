@@ -9,18 +9,20 @@
 #include "sort.h"
 #include "setting.h"
 
-
 void odd_even_sort_parallel(float *arr, uint64_t n, int rank, int size) {
     // 定义两个变量来存储发送总量和接收总量
-    uint64_t send_count = 0;
-    uint64_t recv_count = 0;
+    #ifdef CACULATE_TRANSFER_DATA
+        uint64_t send_count = 0;
+        uint64_t recv_count = 0;
+    #endif
     // 定义记录步骤时间的变量
-    clock_t one_step_start, one_step_end;
-    clock_t two_step_start, two_step_end;
-    clock_t three_step_start, three_step_end;
-    clock_t four_step_start, four_step_end;
-    double time_taken;
-
+    #ifdef STEPTIME
+        clock_t one_step_start, one_step_end;
+        clock_t two_step_start, two_step_end;
+        clock_t three_step_start, three_step_end;
+        clock_t four_step_start, four_step_end;
+        double time_taken;
+    #endif
     uint64_t local_n = n / size;
 
     #ifdef DEBUG
@@ -229,11 +231,15 @@ void odd_even_sort_parallel(float *arr, uint64_t n, int rank, int size) {
 
 void PSRS(float *arr, uint64_t n, int rank, int size){
     // 定义两个变量来存储发送总量和接收总量
-    uint64_t send_count = 0;
-    uint64_t recv_count = 0;
+    #ifdef CACULATE_TRANSFER_DATA
+        uint64_t send_count = 0;
+        uint64_t recv_count = 0;
+    #endif
     // 记录每个步骤排序时间
-    clock_t step_start[7];
-    clock_t step_end[7];
+    #ifdef STEPTIME
+        clock_t step_start[7];
+        clock_t step_end[7];
+    #endif
 
     uint64_t local_n = n / size;
     #ifdef DEBUG
@@ -307,11 +313,11 @@ void PSRS(float *arr, uint64_t n, int rank, int size){
     if(local_n % (uint64_t)size != 0){
         printf("local_n / size must be 0 !!!\n");
         free(local_arr);
-        exit -1;
+        exit(-1);
     } else if(local_n <= (uint64_t)(size - 1)){
         printf("local_n must be larger than size - 1!!!\n");
         free(local_arr);
-        exit -1;
+        exit(-1);
     } else{
         #ifdef STEPTIME
             step_start[2] = clock();
@@ -543,13 +549,13 @@ void PSRS(float *arr, uint64_t n, int rank, int size){
             free(proc_ele_num);
             free(proc_start_index);
             free(proc_data);
-            exit -1;
+            exit(-1);
         }
     }
     for(int i = 0; i < size; i++){
         if(i != rank){
-            MPI_Sendrecv(&(local_arr[last_ele_index[i]]), ele_number[i], MPI_FLOAT, i, 0,
-                    &(proc_data[proc_start_index[i]]), proc_ele_num[i], MPI_FLOAT, i, 0, MPI_COMM_WORLD, &status);
+            MPI_Sendrecv(&(local_arr[last_ele_index[i]]), (int)ele_number[i], MPI_FLOAT, i, 0,
+                    &(proc_data[proc_start_index[i]]), (int)proc_ele_num[i], MPI_FLOAT, i, 0, MPI_COMM_WORLD, &status);
             #ifdef CACULATE_TRANSFER_DATA
                 send_count += sizeof(float) * ele_number[i];
                 recv_count += sizeof(float) * proc_ele_num[i];

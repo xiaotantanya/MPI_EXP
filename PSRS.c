@@ -10,7 +10,6 @@
 #include "setting.h"
 #include "sort.h"
 
-
 int main(int argc, char *argv[]){
     MPI_Init(&argc, &argv);
 
@@ -22,7 +21,7 @@ int main(int argc, char *argv[]){
     if(rank==0){
         if(argc < 2){
             printf("Usage: %s <number_str>\n", argv[0]);
-            exit -1;
+            exit(-1);
         }
     }
 
@@ -30,7 +29,7 @@ int main(int argc, char *argv[]){
     MPI_Barrier(MPI_COMM_WORLD);
 
     float *arr = NULL;
-    float seed = 0.344;
+    float seed = (float)0.344;
     clock_t start_time, end_time;
     if(rank == 0){
         arr = (float*)malloc(N * sizeof(float));

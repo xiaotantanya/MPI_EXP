@@ -9,8 +9,14 @@ project(MPI_EXP
 # 查找 MPI 包
 find_package(MPI REQUIRED)
 set(SRC_LIST)
+
+if(WIN32)
+        message(STAUTS "Current Platform: Windows ")
+        add_compile_options("$<$<C_COMPILER_ID:MSVC>:/utf-8>")
+        add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+endif()
 # 生成动态库
-add_library(MPI_EXP SHARED src/utils.c src/sort.c)
+add_library(MPI_EXP STATIC src/utils.c src/sort.c src/setting.c)
 target_include_directories(MPI_EXP PUBLIC ${PROJECT_SOURCE_DIR}/include)
 
 # add_subdirectory(src)
@@ -18,7 +24,7 @@ target_include_directories(MPI_EXP PUBLIC ${PROJECT_SOURCE_DIR}/include)
 # set(MPI_EXP_LIB MPI_EXP)
 
 
-target_link_libraries(MPI_EXP MPI::MPI_C)
+target_link_libraries(MPI_EXP PUBLIC MPI::MPI_C)
 
 # 添加可执行文件
 add_executable(fast_sort_single fast_sort_single.c)
@@ -26,7 +32,7 @@ add_executable(odd_even_sort odd_even_sort_para.c)
 add_executable(PSRS PSRS.c)
 
 # 链接 MPI 库
-target_link_libraries(fast_sort_single MPI_EXP)
+target_link_libraries(fast_sort_single PUBLIC MPI_EXP)
 target_link_libraries(odd_even_sort PUBLIC MPI_EXP)
 target_link_libraries(PSRS PUBLIC MPI_EXP)
 

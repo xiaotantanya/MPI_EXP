@@ -9,7 +9,9 @@
         "strings.h": "c",
         "setting.h": "c",
         "utils.h": "c",
-        "sort.h": "c"
+        "sort.h": "c",
+        "compare": "c",
+        "cstdint": "c"
     },
     "cmake.configureOnOpen": false
 }

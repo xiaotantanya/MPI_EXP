@@ -1,9 +1,10 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <strings.h>
+#include <string.h>
 #include <time.h>
-#include <unistd.h>
+// #include <unistd.h>
+#include <io.h>
 #include <string.h>
 
 #include "setting.h"
@@ -17,8 +18,9 @@ int main(int argc, char** argv){
     }
 
     int is_test = 0;
-    uint64_t N = get_Num_from_cmd(argc, argv, 0, is_test);
-    float seed = 0.344;
+    // uint64_t N = get_Num_from_cmd(argc, argv, 0, is_test);268435456
+    uint64_t N = 102400000;
+    float seed = (float)0.344;
     
     // 异常检测
     if (N == 1){

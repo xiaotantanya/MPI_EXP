@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <unistd.h>
+#include <io.h>
 #include <limits.h>
 #include "utils.h"
 
@@ -35,7 +35,7 @@ uint64_t get_Num_from_cmd(int argc, char** argv, int rank, int is_test){
         return 1;
     }
     if (rank ==0) {
-        printf("N = %lu\n", N);
+        printf("N = %lu\n", (unsigned long)N);
     }
     return N;
 }
@@ -54,13 +54,13 @@ int re_compare (const void * a, const void * b)
 
 void gen_correct_file(char* check_file, uint64_t N, int rank, int force, int is_test, float seed){
     if(rank == 0){
-        if(force || access(check_file, 0)){
+        if(force || _access(check_file, 0)){
             float* arr_data = (float*)malloc(sizeof(float) * N);
             matrix_gen(arr_data, N, seed);
             qsort(arr_data, N, sizeof(float), compare);
 
             FILE *pd = NULL;
-            pd = fopen(check_file, "wb");
+            errno_t err = fopen_s(&pd, check_file, "wb");
             fwrite(arr_data, sizeof(float), N, pd);
             fclose(pd);
             free(arr_data);
@@ -70,7 +70,8 @@ void gen_correct_file(char* check_file, uint64_t N, int rank, int force, int is_
 
 void check_correct(float* sort_arr, char* check_file, uint64_t N){
     FILE *pd = NULL;
-    pd = fopen(check_file, "rb");
+    errno_t err = fopen_s(&pd, check_file, "rb");
+    // pd = fopen_s(check_file, "rb");
     float *read_arr = (float*)malloc(sizeof(float) * N);
     fread(read_arr, sizeof(float), N, pd);
 
@@ -87,15 +88,16 @@ int MPI_Send_Large(void *buf, uint64_t count, MPI_Datatype datatype, int dest, i
         printf("send_block_num = %lu\n", block_num);
     #endif
     for (uint64_t block_id = 0; block_id < block_num; block_id++){
-        MPI_Send(&(buf[block_id * int_max * (uint64_t)element_size]), INT_MAX, datatype, dest, tag + (int)block_id, comm);
+        MPI_Send(&(((char*)buf)[block_id * int_max * (uint64_t)element_size]), INT_MAX, datatype, dest, tag + (int)block_id, comm);
     }
     if(count- int_max * block_num != 0){
-        MPI_Send(&(buf[block_num*int_max * (uint64_t)element_size]), (int)(count - int_max*block_num), datatype, dest, tag + (int)block_num, comm);
+        MPI_Send(&(((char*)buf)[block_num*int_max * (uint64_t)element_size]), (int)(count - int_max*block_num), datatype, dest, tag + (int)block_num, comm);
         #ifdef DEBUG
             printf(" send extend last elements\n");
         #endif
     }
     
+    return 0;
 }
 
 int MPI_Recv_Large(void *buf, uint64_t count, MPI_Datatype datatype, int source, int tag, MPI_Comm comm, MPI_Status* status, int element_size) {
@@ -105,15 +107,16 @@ int MPI_Recv_Large(void *buf, uint64_t count, MPI_Datatype datatype, int source,
         printf("recv_block_num = %lu\n", block_num);
     #endif
     for (uint64_t block_id = 0; block_id < block_num; block_id++){
-        MPI_Recv(&(buf[block_id * int_max * (uint64_t)element_size]), INT_MAX, datatype, source, tag + (int)block_id, comm, status);
+        MPI_Recv(&(((char*)buf)[block_id * int_max * (uint64_t)element_size]), INT_MAX, datatype, source, tag + (int)block_id, comm, status);
     }
     if(count- int_max * block_num != 0){
-        MPI_Recv(&(buf[block_num * int_max * (uint64_t)element_size]), (int)(count- int_max * block_num), datatype, source, tag + (int)block_num, comm, status);
+        MPI_Recv(&(((char*)buf)[block_num * int_max * (uint64_t)element_size]), (int)(count- int_max * block_num), datatype, source, tag + (int)block_num, comm, status);
         #ifdef DEBUG
             printf(" recv extend last elements\n");
         #endif
     }   
     
+    return 0;
 }
 
 // 目前该函数只能用于两个进程互换信息，不要多个进程交叉在一起。
@@ -129,30 +132,33 @@ int MPI_Sendrecv_Large(void *sendbuf, uint64_t sendcount, MPI_Datatype sendtype,
         uint64_t recv_block_num = recvcount / int_max;
         uint64_t min_block_num = send_block_num < recv_block_num ? send_block_num : recv_block_num;
         int min_index = send_block_num < recv_block_num ? 0 : 1;
-        printf("send_block_num = %lu\n", send_block_num);
-        printf("recv_block_num = %lu\n", recv_block_num);
+        #ifdef DEBUG
+            printf("send_block_num = %lu\n", send_block_num);
+            printf("recv_block_num = %lu\n", recv_block_num);
+        #endif
         for (uint64_t block_id = 0; block_id < min_block_num; block_id++){
-            MPI_Sendrecv(&(sendbuf[block_id * int_max * (uint64_t)element_size]), INT_MAX, sendtype, 
-                            dest, sendtag + (int)block_id, &(recvbuf[block_id * int_max * (uint64_t)element_size]), INT_MAX,
+            MPI_Sendrecv(&(((char*)sendbuf)[block_id * int_max * (uint64_t)element_size]), INT_MAX, sendtype, 
+                            dest, sendtag + (int)block_id, &(((char*)recvbuf)[block_id * int_max * (uint64_t)element_size]), INT_MAX,
                             MPI_FLOAT, source,  recvtag + (int)block_id,
                             comm, status);
         }
         if(send_block_num - recv_block_num != 0){
             if(min_index == 0){
                 for(uint64_t block_id = 0; block_id < recv_block_num - min_block_num; block_id++){
-                    MPI_Sendrecv(&(sendbuf), 0, sendtype, dest, sendtag + (int)block_id + (int)min_block_num, &(recvbuf[(block_id + min_block_num) * int_max * (uint64_t)element_size]), INT_MAX,
+                    MPI_Sendrecv(&(sendbuf), 0, sendtype, dest, sendtag + (int)block_id + (int)min_block_num, &(((char*)recvbuf)[(block_id + min_block_num) * int_max * (uint64_t)element_size]), INT_MAX,
                             recvtype, source,  recvtag + (int)block_id + (int)min_block_num, comm, status);
                 }
             } else{
                 for(uint64_t block_id = 0; block_id < send_block_num - min_block_num; block_id++){
-                    MPI_Sendrecv(&(sendbuf[(block_id + min_block_num) * int_max * (uint64_t)element_size]), int_max, sendtype, dest, sendtag + (int)block_id + (int)min_block_num, &(recvbuf[(block_id + min_block_num) * int_max * (uint64_t)element_size]), 0,
+                    MPI_Sendrecv(&(((char*)sendbuf)[(block_id + min_block_num) * int_max * (uint64_t)element_size]), INT_MAX, sendtype, dest, sendtag + (int)block_id + (int)min_block_num, &(((char*)recvbuf)[(block_id + min_block_num) * int_max * (uint64_t)element_size]), 0,
                             recvtype, source,  recvtag + (int)block_id + (int)(min_block_num), comm, status);
             }
         }
-        MPI_Sendrecv(&(sendbuf[send_block_num * int_max * (uint64_t)element_size]), (int)(sendcount- int_max * send_block_num), sendtype, 
-                            dest, sendtag + (int)(send_block_num) + (int)(recv_block_num), &(recvbuf[recv_block_num * int_max * (uint64_t)element_size]), (int)(recvcount- int_max * recv_block_num),
+        MPI_Sendrecv(&(((char*)sendbuf)[send_block_num * int_max * (uint64_t)element_size]), (int)(sendcount- int_max * send_block_num), sendtype, 
+                            dest, sendtag + (int)(send_block_num) + (int)(recv_block_num), &(((char*)recvbuf)[recv_block_num * int_max * (uint64_t)element_size]), (int)(recvcount- int_max * recv_block_num),
                             recvtype, source,  recvtag + (int)(send_block_num) + (int)(recv_block_num),
                             comm, status);
         // printf(" sendrecv extend last elements\n");
-    }   
+    }
+    return 0;
 }

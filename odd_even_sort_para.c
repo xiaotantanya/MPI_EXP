@@ -10,7 +10,6 @@
 #include "setting.h"
 #include "sort.h"
 
-
 int main(int argc, char *argv[]) {
     MPI_Init(&argc, &argv);
 
@@ -28,7 +27,7 @@ int main(int argc, char *argv[]) {
     MPI_Barrier(MPI_COMM_WORLD);
     // uint64_t N = 16;
     float *arr = NULL;
-    float seed = 0.344;
+    float seed = (float)0.344;
     clock_t start_time, end_time;
     if (rank == 0) {
         arr = (float *)malloc(N * sizeof(float));
