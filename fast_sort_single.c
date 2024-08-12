@@ -27,7 +27,27 @@ int main(int argc, char** argv){
 
     float* arr = (float*)malloc(N * sizeof(float));
     matrix_gen(arr, N, seed);
-
+    if(initial_data == 1){
+        qsort(arr, N, sizeof(float), re_compare);
+        printf("A\n");
+    } else if(initial_data == 2){
+        qsort(arr, N, sizeof(float), compare);
+        printf("B\n");
+    } else if(initial_data == 3){
+        qsort(arr, N, sizeof(float), compare);
+        uint64_t exchange_num  = 0;
+        uint64_t exchange_total = (uint64_t)N / (uint64_t)100;
+        while(exchange_num < exchange_total){
+            uint64_t rand_index = (uint64_t)(((float)rand() / (uint64_t)RAND_MAX) * (N - 1));
+            if(arr[rand_index] != arr[rand_index + 1]){
+                float temp = arr[rand_index];
+                arr[rand_index] = arr[rand_index + 1];
+                arr[rand_index + 1] = temp;
+                exchange_num += 1;
+            }
+        }
+        printf("C\n");
+    }
     // 记录排序前的时间
     clock_t start_time = clock();
 

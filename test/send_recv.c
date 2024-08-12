@@ -2,6 +2,7 @@
 #include <mpi.h>
 #include <limits.h>
 #include <stdlib.h>
+#include <stdint.h>
 
 
 int main(int argc, char *argv[]){
@@ -10,6 +11,8 @@ int main(int argc, char *argv[]){
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
+    uint64_t c = 10000;
+    printf("%lu\n", (uint64_t)(c * 0.345));
     int *a;
     int *b;
     int num = INT_MAX;

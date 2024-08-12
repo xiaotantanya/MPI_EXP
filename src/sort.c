@@ -324,6 +324,7 @@ void PSRS(float *arr, uint64_t n, int rank, int size){
     }
     #ifdef DEBUG
         if(rank == 0){
+            printf("rank[0]: local_crucial_arr: ");
             for(int i = 0; i < (size - 1); i++){
                 printf("%f ", local_crucial_arr[i]);
             }
@@ -341,12 +342,7 @@ void PSRS(float *arr, uint64_t n, int rank, int size){
     } else{
         total_local_crucial_arr = (float*)malloc(sizeof(float) * (size * (size - 1)));
         memcpy(total_local_crucial_arr, local_crucial_arr, (size - 1) * sizeof(float));
-        #ifdef DEBUG
-            for(int i = 0; i < (size - 1); i++){
-                printf("%f ", total_local_crucial_arr[i]);
-            }
-            printf("\n");
-        #endif
+
         for(int i = 1; i < size; i++){
             MPI_Recv(&(total_local_crucial_arr[i * (size - 1)]), size - 1, MPI_FLOAT, i, i, MPI_COMM_WORLD, &status);
             #ifdef CACULATE_TRANSFER_DATA
@@ -360,6 +356,7 @@ void PSRS(float *arr, uint64_t n, int rank, int size){
     #ifdef DEBUG
         MPI_Barrier(MPI_COMM_WORLD);
         if(rank == 0){
+            printf("rank[0]: total local crucial arr: ");
             for(int i = 0; i < (size - 1) * size; i++){
                 printf("%f ", total_local_crucial_arr[i]);
             }
@@ -403,6 +400,7 @@ void PSRS(float *arr, uint64_t n, int rank, int size){
             root_crucial_arr[i - 1] = total_local_crucial_arr_tmp[i * (size - 1)];
         }
         #ifdef DEBUG
+            printf("rank[0]: total local crucial arr tmp: ");
             for(int i = 0; i < size * (size - 1); i++){
                 printf("%f ", total_local_crucial_arr_tmp[i]);
             }
@@ -425,7 +423,7 @@ void PSRS(float *arr, uint64_t n, int rank, int size){
         }
     #endif
     #ifdef DEBUG
-        printf("rank[%d]: ", rank);
+        printf("rank[%d]: root crucial arr: ", rank);
         for(int i = 0; i < size - 1; i++){
             printf("%f ", root_crucial_arr[i]);
         }
@@ -439,6 +437,9 @@ void PSRS(float *arr, uint64_t n, int rank, int size){
     // 一共有size段
     uint64_t *last_ele_index = (uint64_t*)malloc(sizeof(uint64_t) * (size + 1));
     last_ele_index[0] = 0;
+    for(int i = 1; i < size + 1; i++){
+        last_ele_index[i] = local_n + 1;
+    }
     for(uint64_t i = 1; i < size; i++){
         for(uint64_t j = last_ele_index[i - 1]; j < local_n; j++){
             if(local_arr[j] > root_crucial_arr[i - 1]){
@@ -446,11 +447,18 @@ void PSRS(float *arr, uint64_t n, int rank, int size){
                 break;
             }
         }
+        // 及其特殊的情况
+        if(last_ele_index[i] == local_n + 1){
+            for(uint64_t j = i; j < size; j++){
+                last_ele_index[j] = local_n;
+            }
+            break;
+        }
     }
     last_ele_index[size] = local_n;
 
     #ifdef DEBUG
-        printf("rank[%d]: ", rank);
+        printf("rank[%d]: last ele index: ", rank);
         for(int i = 0; i < size + 1; i++){
             printf("%lu ", last_ele_index[i]);
         }
@@ -471,7 +479,7 @@ void PSRS(float *arr, uint64_t n, int rank, int size){
     }
 
     #ifdef DEBUG
-        printf("rank[%d]: ", rank);
+        printf("rank[%d]: ele number: ", rank);
         for(int i = 0; i < size; i++){
             printf("%lu ", ele_number[i]);
         }
@@ -494,12 +502,13 @@ void PSRS(float *arr, uint64_t n, int rank, int size){
     }
 
     #ifdef DEBUG
-        if(rank == 0){
-            for(int i = 0; i < size; i++){
-                printf("%lu ", proc_ele_num[i]);
-            }
-            printf("\n");
+        // if(rank == 0){
+        printf("rank[%d]: proc ele num: ", rank);
+        for(int i = 0; i < size; i++){
+            printf("%lu ", proc_ele_num[i]);
         }
+        printf("\n");
+        // }
     #endif
     uint64_t sum = 0;
     for(int i = 0; i < size; i++){
@@ -524,7 +533,7 @@ void PSRS(float *arr, uint64_t n, int rank, int size){
     }
 
     #ifdef DEBUG
-        printf("rank[%d]: ", rank);
+        printf("rank[%d]: proc start index: ", rank);
         for(int i = 0; i < size; i++){
             printf("%lu ", proc_start_index[i]);
         }
@@ -577,7 +586,7 @@ void PSRS(float *arr, uint64_t n, int rank, int size){
     uint64_t sort_num = 0;
     for(int i = 0; i < size; i++){
         if(proc_ele_num[i] == 0){
-            now_index[i] = -1;
+            now_index[i] = sum + 1;
         }
     }
     while(sort_num < sum){
@@ -614,7 +623,7 @@ void PSRS(float *arr, uint64_t n, int rank, int size){
     #endif
 
     #ifdef DEBUG
-        printf("rank[%d]: ", rank);
+        printf("rank[%d]: partial sort proc data: ", rank);
         for(int i = 0; i < 10; i++){
             printf("%f ", sort_proc_data[i]);
         }
