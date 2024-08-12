@@ -2,7 +2,7 @@
 // #define CACULATE_TRANSFER_DATA
 
 // 是否进行排序结果验证
-// #define CHECK 
+#define CHECK 
 
 // 是否输出DEBUG语句
 // #define DEBUG
