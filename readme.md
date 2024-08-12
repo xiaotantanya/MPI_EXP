@@ -44,7 +44,7 @@ cd build
 ### 多进程奇偶排序
 运行指令：
 
-**注意：多节点多进程--mca参数和--hostfile参数要更具自己的情况进行修改！**
+**注意：多节点多进程--mca参数和--hostfile参数要根据自己的情况进行修改！**
 ```bash
 cd build
 
@@ -71,7 +71,7 @@ mpiexec --mca pml ob1 --mca btl tcp,self --mca btl_tcp_if_include 202.38.247.204
 
 运行指令：
 
-**注意：多节点多进程--mca参数和--hostfile参数要更具自己的情况进行修改！**
+**注意：多节点多进程--mca参数和--hostfile参数要根据自己的情况进行修改！**
 ```bash
 cd build
 

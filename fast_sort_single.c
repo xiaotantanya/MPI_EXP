@@ -44,6 +44,7 @@ int main(int argc, char** argv){
                 arr[rand_index] = arr[rand_index + 1];
                 arr[rand_index + 1] = temp;
                 exchange_num += 1;
+                // printf("%lu\n", exchange_num);
             }
         }
         printf("C\n");
