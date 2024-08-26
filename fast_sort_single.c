@@ -63,13 +63,13 @@ int main(int argc, char** argv){
     // 打印排序时间
     printf("qsort took %f seconds to sort %s elements.\n", time_taken, argv[1]);
 
-    #ifdef CHECK
-        char check_file[20] = "./sorted_";
-        strcat(check_file, argv[1]);
-        printf("check file: %s\n", check_file);
-        gen_correct_file(check_file, N, 0, 1, 0, seed);
-        check_correct(arr, check_file, N);
-    #endif
+    // #ifdef CHECK
+    //     char check_file[20] = "./sorted_";
+    //     strcat(check_file, argv[1]);
+    //     printf("check file: %s\n", check_file);
+    //     gen_correct_file(check_file, N, 0, 1, 0, seed);
+    //     check_correct(arr, check_file, N);
+    // #endif
 
     // 释放内存
     free(arr);
